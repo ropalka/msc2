@@ -39,21 +39,23 @@ final class TaskBuilderImpl<T> implements TaskBuilder<T> {
     private final Transaction transaction;
     private final TaskParent parent;
     private final Set<TaskControllerImpl<?>> dependencies = Collections.newSetFromMap(new IdentityHashMap<TaskControllerImpl<?>, Boolean>());
+    private final boolean txnBoundariesCheckOn;
     private ClassLoader classLoader;
     private Executable<T> executable;
     private Validatable validatable;
     private Revertible revertible;
 
-    TaskBuilderImpl(final Transaction transaction, final TaskParent parent, final Executable<T> executable) {
+    TaskBuilderImpl(final Transaction transaction, final TaskParent parent, final Executable<T> executable, final boolean txnBoundariesCheckOn) {
         this.transaction = transaction;
         this.parent = parent;
         this.executable = executable;
+        this.txnBoundariesCheckOn = txnBoundariesCheckOn;
         if (executable instanceof Validatable) validatable = (Validatable) executable;
         if (executable instanceof Revertible) revertible = (Revertible) executable;
     }
 
-    TaskBuilderImpl(final Transaction transaction, final TaskParent parent) {
-        this(transaction, parent, null);
+    TaskBuilderImpl(final Transaction transaction, final TaskParent parent, final boolean txnBoundariesCheckOn) {
+        this(transaction, parent, null, txnBoundariesCheckOn);
     }
 
     /**
@@ -177,7 +179,7 @@ final class TaskBuilderImpl<T> implements TaskBuilder<T> {
         @SuppressWarnings("rawtypes")
         final TaskControllerImpl[] dependenciesArray = dependencies.isEmpty() ? NO_TASKS : dependencies.toArray(new TaskControllerImpl[dependencies.size()]);
         final TaskControllerImpl<T> controller = new TaskControllerImpl<T>(parent, dependenciesArray, executable, revertible, validatable, classLoader);
-        controller.install();
+        controller.install(txnBoundariesCheckOn);
         return controller;
     }
 }

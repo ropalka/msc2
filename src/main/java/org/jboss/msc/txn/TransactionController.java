@@ -137,7 +137,7 @@ public final class TransactionController extends SimpleAttachable {
      */
     public <T> TaskBuilder<T> newTask(final BasicTransaction transaction, final Executable<T> task) throws IllegalStateException, SecurityException {
         validateTransaction(transaction);
-        return transaction.getTaskFactory().newTask(task);
+        return transaction.getUserTaskFactory().newTask(task);
     }
 
     /**
@@ -150,7 +150,7 @@ public final class TransactionController extends SimpleAttachable {
      */
     public TaskBuilder<Void> newTask(final BasicTransaction transaction) throws IllegalStateException, SecurityException {
         validateTransaction(transaction);
-        return transaction.getTaskFactory().newTask();
+        return transaction.getUserTaskFactory().newTask();
     }
 
     /**

@@ -117,7 +117,7 @@ class DependencyImpl<T> implements Dependency<T> {
      * @param transaction  the active transaction
      */
     void setDependent(ServiceControllerImpl<?> dependent, Transaction transaction) {
-        setDependent(dependent, transaction, transaction.getTaskFactory());
+        setDependent(dependent, transaction, transaction.getImplTaskFactory());
     }
 
     void resetDependent(ServiceControllerImpl<?> dependent, Transaction transaction) {

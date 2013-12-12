@@ -115,7 +115,7 @@ final class Registration extends TransactionalObject {
      * @param transaction       the active transaction
      */
     void installService(final ServiceControllerImpl<?> serviceController, final Transaction transaction) {
-        installService(serviceController, transaction, transaction.getTaskFactory());
+        installService(serviceController, transaction, transaction.getImplTaskFactory());
     }
 
     /**
@@ -163,7 +163,7 @@ final class Registration extends TransactionalObject {
 
     <T> void addIncomingDependency(final Transaction transaction, final DependencyImpl<T> dependency) {
         lockWrite(transaction);
-        installDependenciesValidateTask(transaction, transaction.getTaskFactory());
+        installDependenciesValidateTask(transaction, transaction.getImplTaskFactory());
         final TaskController<Boolean> startTask;
         final boolean up;
         synchronized (this) {
@@ -177,7 +177,7 @@ final class Registration extends TransactionalObject {
             }
         }
         if (up) {
-            dependency.dependencyUp(transaction, transaction.getTaskFactory(), startTask);
+            dependency.dependencyUp(transaction, transaction.getImplTaskFactory(), startTask);
         }
     }
 
@@ -272,7 +272,7 @@ final class Registration extends TransactionalObject {
             return;
         }
         if (transaction.putAttachment(VALIDATE_TASK, Boolean.TRUE) != null) return;
-        ((TaskBuilderImpl<Void>)transaction.getTaskFactory().<Void>newTask()).setValidatable(new Validatable() {
+        ((TaskBuilderImpl<Void>)transaction.getImplTaskFactory().<Void>newTask()).setValidatable(new Validatable() {
             @Override
             public void validate(final ValidateContext context) {
                 try {

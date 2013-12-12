@@ -21,6 +21,7 @@ package org.jboss.msc.txn;
 import static java.lang.Thread.holdsLock;
 
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.jboss.msc._private.MSCLogger;
 
@@ -282,8 +283,8 @@ final class TaskControllerImpl<T> implements TaskController<T>, TaskParent, Task
         }
 
         @Override
-        public void childAdded(final TaskChild child, final boolean userThread) throws InvalidTransactionStateException {
-            getDelegate().childAdded(child, userThread);
+        public void childAdded(final TaskChild child, final boolean userThread, final boolean txnBoundariesCheckOn) throws InvalidTransactionStateException {
+            getDelegate().childAdded(child, userThread, txnBoundariesCheckOn);
         }
 
         @Override
@@ -907,8 +908,12 @@ final class TaskControllerImpl<T> implements TaskController<T>, TaskParent, Task
         if (exec != null) try {
             setClassLoader();
             final class ExecuteContextImpl implements ExecuteContext<T>, TaskFactory {
+
+                final AtomicBoolean finished = new AtomicBoolean();
+
                 @Override
                 public void lockAsynchronously(final TransactionalLock lock, final LockListener listener) {
+                    assertActiveContext();
                     if (lock == null) {
                         throw MSCLogger.TASK.methodParameterIsNull("lock");
                     }
@@ -920,6 +925,7 @@ final class TaskControllerImpl<T> implements TaskController<T>, TaskParent, Task
 
                 @Override
                 public boolean tryLock(final TransactionalLock lock) {
+                    assertActiveContext();
                     if (lock == null) {
                         throw MSCLogger.TASK.methodParameterIsNull("lock");
                     }
@@ -928,16 +934,21 @@ final class TaskControllerImpl<T> implements TaskController<T>, TaskParent, Task
 
                 @Override
                 public void complete(final T result) {
+                    assertActiveContext();
                     execComplete(result);
+                    finished.set(true);
                 }
 
                 @Override
                 public void complete() {
+                    assertActiveContext();
                     complete(null);
+                    finished.set(true);
                 }
 
                 @Override
                 public boolean isCancelRequested() {
+                    assertActiveContext();
                     synchronized (TaskControllerImpl.this) {
                         return Bits.allAreSet(state, FLAG_ROLLBACK_REQ | FLAG_CANCEL_REQ);
                     }
@@ -945,47 +956,64 @@ final class TaskControllerImpl<T> implements TaskController<T>, TaskParent, Task
 
                 @Override
                 public void cancelled() {
+                    assertActiveContext();
                     execCancelled();
+                    finished.set(true);
                 }
 
                 @Override
                 public void addProblem(final Problem reason) {
+                    assertActiveContext();
                     problemReport.addProblem(reason);
                 }
 
                 @Override
                 public void addProblem(final Problem.Severity severity, final String message) {
+                    assertActiveContext();
                     addProblem(new Problem(TaskControllerImpl.this, message, severity));
                 }
 
                 @Override
                 public void addProblem(final Problem.Severity severity, final String message, final Throwable cause) {
+                    assertActiveContext();
                     addProblem(new Problem(TaskControllerImpl.this, message, cause, severity));
                 }
 
                 @Override
                 public void addProblem(final String message, final Throwable cause) {
+                    assertActiveContext();
                     addProblem(new Problem(TaskControllerImpl.this, message, cause));
                 }
 
                 @Override
                 public void addProblem(final String message) {
+                    assertActiveContext();
                     addProblem(new Problem(TaskControllerImpl.this, message));
                 }
 
                 @Override
                 public void addProblem(final Throwable cause) {
+                    assertActiveContext();
                     addProblem(new Problem(TaskControllerImpl.this, cause));
                 }
 
                 @Override
                 public <N> TaskBuilder<N> newTask(final Executable<N> task) throws IllegalStateException {
-                    return new TaskBuilderImpl<N>(getTransaction(), TaskControllerImpl.this, task);
+                    assertActiveContext();
+                    return new TaskBuilderImpl<N>(getTransaction(), TaskControllerImpl.this, task, true);
                 }
 
+                @SuppressWarnings("unchecked")
                 @Override
                 public TaskBuilder<Void> newTask() throws IllegalStateException {
-                    return new TaskBuilderImpl<Void>(getTransaction(), TaskControllerImpl.this);
+                    assertActiveContext();
+                    return new TaskBuilderImpl<Void>(getTransaction(), TaskControllerImpl.this, true);
+                }
+
+                private void assertActiveContext() throws IllegalStateException {
+                    if (finished.get()) {
+                        throw MSCLogger.TASK.contextFinished();
+                    }
                 }
             }
             exec.execute(new ExecuteContextImpl());
@@ -1067,7 +1095,7 @@ final class TaskControllerImpl<T> implements TaskController<T>, TaskParent, Task
     }
 
     @Override
-    public void childAdded(final TaskChild child, final boolean userThread) throws InvalidTransactionStateException {
+    public void childAdded(final TaskChild child, final boolean userThread, final boolean txnBoundariesCheckOn) throws InvalidTransactionStateException {
         assert ! holdsLock(this);
         int state = 0;
         TaskParent adopter = null;
@@ -1098,7 +1126,7 @@ final class TaskControllerImpl<T> implements TaskController<T>, TaskParent, Task
         if (adopter == null) {
             executeTasks(state);
         } else {
-            adopter.childAdded(child, userThread);
+            adopter.childAdded(child, userThread, txnBoundariesCheckOn);
         }
     }
 
@@ -1193,14 +1221,14 @@ final class TaskControllerImpl<T> implements TaskController<T>, TaskParent, Task
         executeTasks(state);
     }
 
-    void install() {
+    void install(final boolean txnBoundariesCheckOn) {
         assert ! holdsLock(this);
         int state;
         synchronized (this) {
             unfinishedDependencies = dependencies.length;
         }
         try {
-            parent.childAdded(this, true);
+            parent.childAdded(this, true, txnBoundariesCheckOn);
         } catch (IllegalStateException e) {
             synchronized (this) {
                 state = this.state | FLAG_USER_THREAD | FLAG_INSTALL_FAILED;

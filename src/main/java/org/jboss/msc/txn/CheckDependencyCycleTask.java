@@ -49,7 +49,7 @@ final class CheckDependencyCycleTask implements Validatable {
             task = transaction.getAttachment(key);
         } else {
             task = new CheckDependencyCycleTask(transaction);
-            ((TaskBuilderImpl<Object>)(transaction.getTaskFactory().newTask())).setValidatable(task).release();
+            ((TaskBuilderImpl<Object>)(transaction.getImplTaskFactory().newTask())).setValidatable(task).release();
         }
         task.checkService(service);
     }

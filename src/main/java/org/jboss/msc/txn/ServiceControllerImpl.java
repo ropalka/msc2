@@ -269,7 +269,7 @@ final class ServiceControllerImpl<T> extends TransactionalObject implements Serv
             state &= ~SERVICE_ENABLED;
             if (!isRegistryEnabled()) return;
         }
-        transactionalInfo.transition(transaction, transaction.getTaskFactory());
+        transactionalInfo.transition(transaction, transaction.getImplTaskFactory());
     }
 
     /**
@@ -287,7 +287,7 @@ final class ServiceControllerImpl<T> extends TransactionalObject implements Serv
             state |= SERVICE_ENABLED;
             if (!isRegistryEnabled()) return;
         }
-        transactionalInfo.transition(transaction, transaction.getTaskFactory());
+        transactionalInfo.transition(transaction, transaction.getImplTaskFactory());
     }
 
     private boolean isServiceEnabled() {
@@ -302,7 +302,7 @@ final class ServiceControllerImpl<T> extends TransactionalObject implements Serv
             state &= ~REGISTRY_ENABLED;
             if (!isServiceEnabled()) return;
         }
-        transactionalInfo.transition(transaction, transaction.getTaskFactory());
+        transactionalInfo.transition(transaction, transaction.getImplTaskFactory());
     }
 
     void enableRegistry(Transaction transaction) {
@@ -312,7 +312,7 @@ final class ServiceControllerImpl<T> extends TransactionalObject implements Serv
             state |= REGISTRY_ENABLED;
             if (!isServiceEnabled()) return;
         }
-        transactionalInfo.transition(transaction, transaction.getTaskFactory());
+        transactionalInfo.transition(transaction, transaction.getImplTaskFactory());
     }
 
     private boolean isRegistryEnabled() {
@@ -328,7 +328,7 @@ final class ServiceControllerImpl<T> extends TransactionalObject implements Serv
 
     @Override
     public void remove(Transaction transaction) {
-        this.remove(transaction, transaction.getTaskFactory());
+        this.remove(transaction, transaction.getImplTaskFactory());
     }
 
     @Override
@@ -565,7 +565,7 @@ final class ServiceControllerImpl<T> extends TransactionalObject implements Serv
             if (transactionalState != STATE_FAILED) {
                 return;
             }
-            startTask = StartingServiceTasks.create(ServiceControllerImpl.this, dependencyStartTasks, transaction, transaction.getTaskFactory());
+            startTask = StartingServiceTasks.create(ServiceControllerImpl.this, dependencyStartTasks, transaction, transaction.getImplTaskFactory());
         }
 
         private synchronized TaskController<?> transition(Transaction transaction, TaskFactory taskFactory) {

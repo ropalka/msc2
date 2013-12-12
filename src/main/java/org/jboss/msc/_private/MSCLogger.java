@@ -212,6 +212,9 @@ public interface MSCLogger {
     @Message (id = 127, value = "A service named %s is already installed")
     DuplicateServiceException duplicateService(final ServiceName serviceName);
 
+    @Message (id = 128, value = "Context already finished its execution")
+    IllegalStateException contextFinished();
+
     /*
      * Location nesting types.
      */

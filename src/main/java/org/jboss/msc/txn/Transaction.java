@@ -99,22 +99,32 @@ public abstract class Transaction extends SimpleAttachable implements Attachable
             doChildTerminated(userThread);
         }
 
-        public void childAdded(final TaskChild child, final boolean userThread) throws InvalidTransactionStateException {
-            doChildAdded((TaskControllerImpl<?>) child, userThread);
+        public void childAdded(final TaskChild child, final boolean userThread, final boolean txnBoundariesCheckOn) throws InvalidTransactionStateException {
+            doChildAdded((TaskControllerImpl<?>) child, userThread, txnBoundariesCheckOn);
         }
 
         public Transaction getTransaction() {
             return Transaction.this;
         }
     };
-    private final TaskFactory taskFactory = new TaskFactory() {
+    private final TaskFactory userTaskFactory = new TaskFactory() {
         public final <T> TaskBuilder<T> newTask(Executable<T> task) throws IllegalStateException {
-            return new TaskBuilderImpl<T>(Transaction.this, topParent, task);
+            return new TaskBuilderImpl<T>(Transaction.this, topParent, task, true);
         }
 
         @SuppressWarnings("unchecked")
         public TaskBuilder<Void> newTask() throws IllegalStateException {
-            return new TaskBuilderImpl<Void>(Transaction.this, topParent);
+            return new TaskBuilderImpl<Void>(Transaction.this, topParent, true);
+        }
+    };
+    private final TaskFactory implTaskFactory = new TaskFactory() {
+        public final <T> TaskBuilder<T> newTask(Executable<T> task) throws IllegalStateException {
+            return new TaskBuilderImpl<T>(Transaction.this, topParent, task, false);
+        }
+
+        @SuppressWarnings("unchecked")
+        public TaskBuilder<Void> newTask() throws IllegalStateException {
+            return new TaskBuilderImpl<Void>(Transaction.this, topParent, false);
         }
     };
     private long endTime;
@@ -564,12 +574,12 @@ public abstract class Transaction extends SimpleAttachable implements Attachable
         executeTasks(state);
     }
 
-    private void doChildAdded(final TaskControllerImpl<?> child, final boolean userThread) throws InvalidTransactionStateException {
+    private void doChildAdded(final TaskControllerImpl<?> child, final boolean userThread, final boolean txnBoundariesCheckOn) throws InvalidTransactionStateException {
         assert ! holdsLock(this);
         int state;
         synchronized (this) {
             state = this.state;
-            if (stateOf(state) != STATE_ACTIVE) {
+            if (stateOf(state) != STATE_ACTIVE || (txnBoundariesCheckOn && (isPrepareRequested || isRollbackRequested))) {
                 throw MSCLogger.TXN.cannotAddChildToInactiveTxn(stateOf(state));
             }
             if (userThread) state |= FLAG_USER_THREAD;
@@ -739,8 +749,20 @@ public abstract class Transaction extends SimpleAttachable implements Attachable
         }
     }
 
-    final TaskFactory getTaskFactory() {
-        return taskFactory;
+    /**
+     * Task factory that enforces transaction boundaries checks.
+     * @return user task factory
+     */
+    TaskFactory getUserTaskFactory() {
+        return userTaskFactory;
+    }
+
+    /**
+     * Task factory that disables transaction boundaries checks (for our internal usage only).
+     * @return user task factory
+     */
+    TaskFactory getImplTaskFactory() {
+        return implTaskFactory;
     }
 
     class AsyncTask implements Runnable {

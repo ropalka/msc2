@@ -52,7 +52,7 @@ interface TaskParent {
      * @param child the child added
      * @param userThread {@code true} if executed from a user thread
      */
-    void childAdded(TaskChild child, boolean userThread) throws InvalidTransactionStateException;
+    void childAdded(TaskChild child, boolean userThread, final boolean txnBoundariesCheckOn) throws InvalidTransactionStateException;
 
     /**
      * Get the transaction implementation for this parent.

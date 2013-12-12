@@ -65,7 +65,7 @@ class ServiceContextImpl implements ServiceContext {
         if (controller == null) {
             return;
         }
-        controller.remove(transaction, transaction.getTaskFactory());
+        controller.remove(transaction, transaction.getImplTaskFactory());
     }
 
     @Override
