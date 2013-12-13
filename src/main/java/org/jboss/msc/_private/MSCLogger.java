@@ -215,6 +215,9 @@ public interface MSCLogger {
     @Message (id = 128, value = "Context already finished its execution")
     IllegalStateException contextFinished();
 
+    @Message (id = 129, value = "Cannot add new tasks to inactive transaction")
+    InvalidTransactionStateException inactiveTransaction();
+
     /*
      * Location nesting types.
      */
