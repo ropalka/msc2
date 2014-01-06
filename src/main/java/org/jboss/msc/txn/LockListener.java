@@ -27,8 +27,9 @@ public interface LockListener {
     
     /**
      * Called when lock is successfully acquired.
+     * @param reentrant <code>false</code> if first lock acquisition, <code>true</code> otherwise.
      */
-    void lockAcquired();
+    void lockAcquired(final boolean reentrant);
     
     /**
      * Called when transaction deadlock is detected.

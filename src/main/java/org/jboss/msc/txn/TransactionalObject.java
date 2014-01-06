@@ -33,7 +33,6 @@ import java.util.concurrent.CountDownLatch;
 abstract class TransactionalObject {
 
     protected final TransactionalLock lock = new TransactionalLock();
-    private boolean snapshotCreated;
 
     /**
      * Write locks this object under {@code transaction}. If another transaction holds the lock, this method will block
@@ -48,8 +47,8 @@ abstract class TransactionalObject {
         final CountDownLatch signal = new CountDownLatch(1);
         lock.lockAsynchronously(transaction, new LockListener() {
             @Override
-            public void lockAcquired() {
-                configureLockCleaner();
+            public void lockAcquired(final boolean reentrant) {
+                if (!reentrant) configureLockCleaner();
                 signal.countDown();
             }
 
@@ -69,8 +68,6 @@ abstract class TransactionalObject {
     private void configureLockCleaner() {
         final Object snapshot;
         synchronized (this) {
-            if (snapshotCreated) return;
-            snapshotCreated = true;
             snapshot = takeSnapshot();
             writeLocked();
         }
@@ -82,7 +79,6 @@ abstract class TransactionalObject {
                     if (reverted) {
                         revert(snapshot);
                     }
-                    snapshotCreated = false;
                 }
             }
         });

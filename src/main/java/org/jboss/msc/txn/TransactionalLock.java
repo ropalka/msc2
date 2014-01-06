@@ -18,6 +18,8 @@
 
 package org.jboss.msc.txn;
 
+import static java.lang.Thread.holdsLock;
+
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import org.jboss.msc._private.MSCLogger;
@@ -40,38 +42,59 @@ public final class TransactionalLock {
     private volatile Transaction owner;
     private static final AtomicReferenceFieldUpdater<TransactionalLock, Cleaner> cleanerUpdater = AtomicReferenceFieldUpdater.newUpdater(TransactionalLock.class, Cleaner.class, "cleaner");
     private volatile Cleaner cleaner;
+    boolean listenerLockAcquiredCalled;
     
     TransactionalLock() {}
-    
+
     void lockAsynchronously(final Transaction newOwner, final LockListener listener) {
         Transaction previousOwner;
+        boolean reentrant = false;
         while (true) {
-            previousOwner = owner;
-            if (previousOwner == null) {
-                if (ownerUpdater.compareAndSet(this, null, newOwner)) {
-                    // lock successfully acquired
-                    newOwner.addLock(this);
-                    safeCallLockAcquired(listener);
-                    break;
+            synchronized (this) {
+                previousOwner = owner;
+                if (previousOwner == null) {
+                    listenerLockAcquiredCalled = false;
+                    if (ownerUpdater.compareAndSet(this, null, newOwner)) {
+                        // lock successfully acquired
+                        newOwner.addLock(this);
+                        reentrant = false;
+                        break;
+                    }
+                    continue;
                 }
-            } else {
                 if (previousOwner == newOwner) {
                     // reentrant access
-                    safeCallLockAcquired(listener);
-                    break;
-                } else {
-                    // some transaction already owns the lock, registering termination listener
-                    final boolean deadlockDetected = Transactions.waitForAsynchronously(newOwner, previousOwner,
-                            new TerminationListener() {
-                                @Override
-                                public void transactionTerminated() {
-                                    lockAsynchronously(newOwner, listener);
-                                }
-                            });
-                    if (deadlockDetected) safeCallDeadlockDetected(listener); 
+                    reentrant = true;
+                    boolean interrupted = false;
+                    try {
+                        while (!listenerLockAcquiredCalled) {
+                            try {
+                                wait();
+                            } catch (final InterruptedException e) {
+                                interrupted = true;
+                            }
+                        }
+                    } finally {
+                        if (interrupted) Thread.currentThread().interrupt();
+                    }
                     break;
                 }
             }
+            // some transaction already owns the lock, registering termination listener
+            final boolean deadlockDetected = Transactions.waitForAsynchronously(newOwner, previousOwner,
+                new TerminationListener() {
+                     @Override
+                     public void transactionTerminated() {
+                         lockAsynchronously(newOwner, listener);
+                     }
+                });
+            if (deadlockDetected) safeCallDeadlockDetected(listener);
+            return;
+        }
+        safeCallLockAcquired(listener, reentrant);
+        synchronized (this) {
+            listenerLockAcquiredCalled = true;
+            notifyAll();
         }
     }
 
@@ -100,15 +123,19 @@ public final class TransactionalLock {
         }
     }
     
-    private void safeCallLockAcquired(final LockListener listener) {
+    private void safeCallLockAcquired(final LockListener listener, final boolean reentrant) {
+        assert !holdsLock(this);
+        if (listener == null) return;
         try {
-            listener.lockAcquired();
+            listener.lockAcquired(reentrant);
         } catch (final Throwable t) {
             MSCLogger.FAIL.lockListenerFailed(t);
         }
     }
 
     private void safeCallDeadlockDetected(final LockListener listener) {
+        assert !holdsLock(this);
+        if (listener == null) return;
         try {
             listener.deadlockDetected();
         } catch (final Throwable t) {
